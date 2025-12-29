@@ -1,0 +1,94 @@
+-- =============================================
+-- AI CAR CONSULTANT - DATABASE SETUP
+-- Description: Schema definitions and RPC functions for RAG architecture
+-- Author: [Senin Adın]
+-- =============================================
+
+-- 1. Enable Vector Extension (Google Gemini Embedding boyutları için)
+create extension if not exists vector;
+
+-- 2. Vehicles Table (Araçların temel kimlik bilgileri)
+create table vehicles (
+  id uuid primary key default gen_random_uuid(),
+  brand text not null,
+  model text not null,
+  generation text,       -- Örn: Mk4, B8 Kasa vb.
+  engine text,          -- Örn: 1.5 dCi, 1.4 Fire
+  transmission text,    -- Örn: Manuel, Otomatik
+  fuel_type text,       -- Örn: Dizel, Benzin
+  year_start int,       -- Üretim başlangıç yılı
+  year_end int,         -- Üretim bitiş yılı (veya günümüz)
+  segment text,         -- Örn: B-Hatchback, C-Sedan
+  created_at timestamp with time zone default now()
+);
+
+-- 3. Market Prices Table (Dinamik piyasa verileri)
+create table market_prices (
+  id uuid primary key default gen_random_uuid(),
+  vehicle_id uuid references vehicles(id) on delete cascade,
+  price_avg int,        -- Ortalama piyasa fiyatı
+  price_min int,        -- En düşük ilan fiyatı
+  price_max int,        -- En yüksek ilan fiyatı
+  currency text default 'TRY',
+  last_updated timestamp with time zone default now()
+);
+
+-- 4. Expert Insights Table (AI için anlamsal veriler ve vektörler)
+create table expert_insights (
+  id uuid primary key default gen_random_uuid(),
+  vehicle_id uuid references vehicles(id) on delete cascade,
+  ai_summary_text text, -- AI tarafından oluşturulmuş araç özeti
+  chronic_issues text,  -- Bilinen kronik sorunlar
+  reliability_score float, -- 1-10 arası sorunsuzluk puanı
+  embedding vector(768) -- Google Gemini text-embedding-004 çıktısı
+);
+
+-- 5. Hybrid Search Function (Vektör + Filtreleme Araması)
+-- Bu fonksiyon n8n üzerinden RPC (Remote Procedure Call) ile çağrılır.
+create or replace function search_best_car (
+  query_embedding vector(768), -- Kullanıcının sorusunun vektör hali
+  match_threshold float,       -- Benzerlik eşiği (Örn: 0.25)
+  match_count int,             -- Kaç sonuç dönsün
+  max_price int DEFAULT 100000000 -- Fiyat filtresi (Opsiyonel)
+)
+returns table (
+  brand text,
+  model text,
+  year_start int,
+  year_end int,
+  price_avg int,
+  ai_summary_text text,
+  chronic_issues text,
+  similarity float
+)
+language plpgsql
+as $$
+begin
+  return query
+  select
+    vehicles.brand,
+    vehicles.model,
+    vehicles.year_start,
+    vehicles.year_end,
+    market_prices.price_avg,
+    expert_insights.ai_summary_text,
+    expert_insights.chronic_issues,
+    -- Cosine Similarity Hesaplaması
+    (1 - (expert_insights.embedding <=> query_embedding)) as similarity
+  from
+    expert_insights
+  join
+    vehicles on expert_insights.vehicle_id = vehicles.id
+  join
+    market_prices on expert_insights.vehicle_id = market_prices.vehicle_id
+  where 
+    -- 1. Kriter: Anlamsal Benzerlik Eşiği
+    (1 - (expert_insights.embedding <=> query_embedding) > match_threshold)
+    AND
+    -- 2. Kriter: Fiyat Filtresi (Metadata Filtering)
+    (market_prices.price_avg <= max_price)
+  order by
+    expert_insights.embedding <=> query_embedding asc
+  limit match_count;
+end;
+$$;

@@ -1,0 +1,363 @@
+{
+  "name": "Vehicle Data Collection and Multi-Table Storage with AI Embeddings",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5bc4eba5-2f60-48fd-a177-9c962d6c0242",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2864,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "car_name",
+              "value": "Chery Omoda 5 Excellent",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "cef4d417-0277-49b8-bbd9-4b48af3fbacd",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2640,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let rawText;\nlet parsedData;\n\n// 1️⃣ Gemini çıktısından JSON string'i al\ntry {\n  rawText = $input.item.json.content.parts[0].text;\n} catch (error) {\n  throw new Error('Failed to access Gemini text output structure');\n}\n\n// 2️⃣ JSON string'i parse et\ntry {\n  parsedData = JSON.parse(rawText);\n} catch (error) {\n  throw new Error('Failed to parse JSON from Gemini output: ' + error.message);\n}\n\n// 3️⃣ Şema kontrolü\nif (!parsedData.vehicles || !parsedData.expert_insights || !parsedData.market_prices) {\n  throw new Error('Parsed JSON does not contain expected keys (vehicles, expert_insights,market_prices)');\n}\n\nconst vehicles = parsedData.vehicles;\nconst expert = parsedData.expert_insights;\nconst price =parsedData.market_prices;\n// 4️⃣ Pipeline için sadeleştirilmiş output\nreturn {\n  json: {\n    // vehicles table\n    brand: vehicles.brand,\n    model: vehicles.model,\n    generation: vehicles.generation,\n    engine: vehicles.engine,\n    transmission: vehicles.transmission,\n    fuel_type: vehicles.fuel_type,\n    year_start: vehicles.year_start,\n    year_end: vehicles.year_end,\n    segment: vehicles.segment,\n    // expert_insights table\n    chronic_issues: expert.chronic_issues,\n    market_liquidity: expert.market_liquidity,\n    maintenance_cost: expert.maintenance_cost,\n    reliability_score: expert.reliability_score,\n    real_fuel_city: expert.real_fuel_city,\n    comfort_notes: expert.comfort_notes,\n    ai_summary_text: expert.ai_summary_text,\n    //market_price table\n    price_min:price.price_min,\n    price_avg:price.price_avg,\n    price_max:price.price_max\n\n  }\n};\n"
+      },
+      "id": "7f483986-56d4-4c95-b59c-324e6e1d2f95",
+      "name": "Parse JSON Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2064,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "vehicles",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "brand",
+              "fieldValue": "={{ $json.brand }}"
+            },
+            {
+              "fieldId": "model",
+              "fieldValue": "={{ $json.model }}"
+            },
+            {
+              "fieldId": "generation",
+              "fieldValue": "={{ $json.generation }}"
+            },
+            {
+              "fieldId": "engine",
+              "fieldValue": "={{ $json.engine }}"
+            },
+            {
+              "fieldId": "fuel_type",
+              "fieldValue": "={{ $json.fuel_type }}"
+            },
+            {
+              "fieldId": "year_start",
+              "fieldValue": "={{ $json.year_start }}"
+            },
+            {
+              "fieldId": "year_end",
+              "fieldValue": "={{ $json.year_end }}"
+            },
+            {
+              "fieldId": "transmission",
+              "fieldValue": "={{ $json.transmission }}"
+            },
+            {
+              "fieldId": "segment",
+              "fieldValue": "={{ $json.segment }}"
+            }
+          ]
+        }
+      },
+      "id": "d2b397f7-1a7f-4e96-9090-07df5a971710",
+      "name": "Insert Vehicle Data",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1808,
+        -320
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "8aMmgNRF42Ak82Gf",
+          "name": "Supabase account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3-flash-preview",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.car_name }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "systemMessage": "You are an AI vehicle data generator operating inside an automated database pipeline.\n\nYour task is to generate ONLY the fields that are allowed for AI generation,\nbased strictly on the database schema provided below.\n\nCRITICAL RULES:\n- Return ONLY valid JSON.\n- **OUTPUT LANGUAGE: All text fields (summary, issues, notes) MUST be in TURKISH.**\n- Do NOT include explanations, comments, or markdown.\n- Do NOT generate IDs.\n- Do NOT generate foreign keys.\n- Do NOT generate embeddings.\n- Do NOT generate system-managed or external-data fields.\n- Follow the schema EXACTLY.\n- Do NOT add extra fields.\n- Use realistic real-world automotive data.\n\nThe database schema is fixed and MUST be respected.\n\n---\n\nDATABASE SCHEMA CONTEXT (READ CAREFULLY)\n\nTABLE: vehicles\n- id → auto-generated (DO NOT OUTPUT)\n- brand → AI-generated\n- model → AI-generated\n- generation → AI-generated\n- engine → AI-generated\n- transmission → AI-generated\n- fuel_type → AI-generated\n- year_start → AI-generated\n- year_end → AI-generated\n- segment → AI-generated (e.g., C-Segment, SUV, D-Segment)\n\nTABLE: market_prices\n- id → auto-generated (DO NOT OUTPUT)\n- vehicle_id → system-assigned (DO NOT OUTPUT)\n- price_min → external data (DO NOT OUTPUT)\n- price_avg → external data (DO NOT OUTPUT)\n- price_max → external data (DO NOT OUTPUT)\n- last_updated → system-managed (DO NOT OUTPUT)\n\nTABLE: expert_insights\n- id → auto-generated (DO NOT OUTPUT)\n- vehicle_id → system-assigned (DO NOT OUTPUT)\n- chronic_issues → AI-generated (Must be in Turkish)\n- market_liquidity → AI-generated (Must be in Turkish)\n- maintenance_cost → AI-generated (relative numeric score 1-10)\n- reliability_score → AI-generated (0–100)\n- real_fuel_city → AI-generated (L/100km)\n- comfort_notes → AI-generated (Must be in Turkish)\n- ai_summary_text → AI-generated (main expert text in Turkish)\n- embedding → system-generated later (DO NOT OUTPUT)\n\n---\n\nOUTPUT FORMAT (EXACT, ONLY THESE FIELDS)\n\n{\n  \"vehicles\": {\n    \"brand\": \"string\",\n    \"model\": \"string\",\n    \"generation\": \"string\",\n    \"engine\": \"string\",\n    \"transmission\": \"string\",\n    \"fuel_type\": \"string\",\n    \"year_start\": number,\n    \"year_end\": number,\n    \"segment\": \"string\"\n  },\n  \"expert_insights\": {\n    \"chronic_issues\": \"string\",\n    \"market_liquidity\": \"string\",\n    \"maintenance_cost\": number,\n    \"reliability_score\": number,\n    \"real_fuel_city\": number,\n    \"comfort_notes\": \"string\",\n    \"ai_summary_text\": \"string\"\n  }\n}\n\n---\n\nFIELD CONSTRAINTS\n\n[vehicles]\n- brand: Manufacturer name only (e.g., BMW, Toyota)\n- model: Model name only\n- generation: Generation or chassis code if applicable\n- engine: Engine description (e.g., 2.0L Turbo Petrol)\n- transmission: Manual / Automatic / CVT / DCT\n- fuel_type: Petrol, Diesel, Hybrid, Plug-in Hybrid, Electric\n- year_start: First production year\n- year_end: Last production year or current year if ongoing\n- segment: The standard market segment (A, B, C, D, SUV, etc.)\n\n[expert_insights]\n- chronic_issues: Known recurring problems, factual and neutral (In Turkish)\n- market_liquidity: How easily the car sells on the used market (In Turkish, e.g., 'Hızlı', 'Yavaş')\n- maintenance_cost: Relative cost score (1–10)\n- reliability_score: 0–100 scale\n- real_fuel_city: Realistic city fuel consumption (L/100km)\n- comfort_notes: Ride quality, noise, interior comfort (In Turkish)\n- ai_summary_text: High-quality expert summary, 3–4 sentences (In Turkish)\n\n---\n[market_prices]\n1. Estimate prices based on current (2024-2025) Turkish used car market conditions (TL).\n2. Use ONLY NUMBERS (Integers). (e.g., 1200000). NEVER use periods, commas, or the text \"TL\".\n3. price_min: Lowest market price for a vehicle that is not damaged/heavily damaged.\n4. price_avg: Average market price for a clean vehicle.\n5. price_max: Low mileage/fault-free market price.\n\nOutput JSON Format (Market part):\n{\n... (other fields),\n\"market_prices\": {\n\"price_min\": 1000000,\n\"price_avg\": 1150000,\n\"price_max\": 1250000\n}\n}\n\n\n\nFINAL VALIDATION BEFORE OUTPUT\n- JSON must parse without errors\n- No null values\n- No empty strings\n- No trailing commas\n- No fields outside the schema\n- **Confirm language is Turkish**\n\nIf data is uncertain, make the most reasonable real-world assumption."
+        }
+      },
+      "id": "c8932cf8-60eb-4755-a264-1d48934c1846",
+      "name": "Generate Vehicle Data",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -2416,
+        -320
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Sbt8wsXJIF9AZyH7",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "expert_insights",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "vehicle_id",
+              "fieldValue": "={{ $('Insert Vehicle Data').item.json.id }}"
+            },
+            {
+              "fieldId": "chronic_issues",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.chronic_issues }}"
+            },
+            {
+              "fieldId": "market_liquidity",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.market_liquidity }}"
+            },
+            {
+              "fieldId": "maintenance_cost",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.maintenance_cost }}"
+            },
+            {
+              "fieldId": "reliability_score",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.reliability_score }}"
+            },
+            {
+              "fieldId": "real_fuel_city",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.real_fuel_city }}"
+            },
+            {
+              "fieldId": "comfort_notes",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.comfort_notes }}"
+            },
+            {
+              "fieldId": "ai_summary_text",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.ai_summary_text }}"
+            },
+            {
+              "fieldId": "embedding",
+              "fieldValue": "={{ $json.embedding.values }}"
+            }
+          ]
+        }
+      },
+      "id": "62e9fccb-e489-4232-944b-cd0ed0e2ae84",
+      "name": "Insert expert_insights",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1376,
+        -320
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "8aMmgNRF42Ak82Gf",
+          "name": "Supabase account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.ai_summary_text }}\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1584,
+        -320
+      ],
+      "id": "ace3c78c-5ad7-44f4-b97b-483e9dca1779",
+      "name": "HTTP Request",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Sbt8wsXJIF9AZyH7",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "market_prices",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "vehicle_id",
+              "fieldValue": "={{ $('Insert Vehicle Data').item.json.id }}"
+            },
+            {
+              "fieldId": "price_min",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.price_min }}"
+            },
+            {
+              "fieldId": "price_avg",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.price_avg }}"
+            },
+            {
+              "fieldId": "price_max",
+              "fieldValue": "={{ $('Parse JSON Response').item.json.price_max }}"
+            }
+          ]
+        }
+      },
+      "id": "30780a31-0a1f-4f54-986f-eb51d59d8366",
+      "name": "Insert expert_insights1",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -1184,
+        -320
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "8aMmgNRF42Ak82Gf",
+          "name": "Supabase account 4"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Generate Vehicle Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Vehicle Data": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Response": {
+      "main": [
+        [
+          {
+            "node": "Insert Vehicle Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Vehicle Data": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert expert_insights": {
+      "main": [
+        [
+          {
+            "node": "Insert expert_insights1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Insert expert_insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "81ef2269-48ac-448d-920b-3247ca67726c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "baaa9f19fbd3fd640b1b94d0f7382a8b0e54fecbbd695eec7fd90c832ae9299a"
+  },
+  "id": "37To8SfIJELzJYvF",
+  "tags": []
+}

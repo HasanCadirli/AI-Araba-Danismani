@@ -1,0 +1,249 @@
+{
+  "name": "car_reccomend",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.chatInput }}\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        32
+      ],
+      "id": "ad667458-8437-4ed2-ab66-ed6f9a3cd777",
+      "name": "HTTP Request",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Sbt8wsXJIF9AZyH7",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -400,
+        32
+      ],
+      "id": "df40f6cc-918b-4b33-b7e4-df5657934555",
+      "name": "When chat message received",
+      "webhookId": "35fef00b-da74-4e20-a568-2ecc7ad55d99"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xsftkalgfdypyprffngy.supabase.co/rest/v1/rpc/search_best_car",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\nJSON.stringify({\n  \"query_embedding\": $('HTTP Request').first().json.embedding.values,\n  \"match_threshold\": 0.25,\n  \"match_count\": 3,\n  \"max_price\": parseInt($('fiyat_ceken').first().json.content.parts[0].text) || 100000000\n})\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        384,
+        32
+      ],
+      "id": "17a78c41-c618-4103-ae74-2024e93a693b",
+      "name": "HTTP Request1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "8aMmgNRF42Ak82Gf",
+          "name": "Supabase account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "__CUSTOM_API_CALL__"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -112
+      ],
+      "id": "b772ea9d-d135-48b3-a6a6-2d48fb4c98e5",
+      "name": "__CUSTOM_API_CALL__ row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "8aMmgNRF42Ak82Gf",
+          "name": "Supabase account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Kullanıcının mesajındaki maksimum bütçeyi bul. Sadece sayı olarak ver. Eğer bütçe belirtmediyse 0 yaz. Mesaj: {{ $json.chatInput }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        32
+      ],
+      "id": "e0b0a7ef-246c-4228-94ee-15f8127ce681",
+      "name": "fiyat_ceken",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Sbt8wsXJIF9AZyH7",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Sen yardımsever, samimi ve uzman bir otomobil danışmanısın.\n\nKullanıcının Sorusu:\n\"{{ $('When chat message received').item.json.chatInput }}\"\n\nVeritabanından Gelen Araç Listesi (JSON):\n{{ JSON.stringify($json) }}\n\nGÖREVİN:\nSana verilen JSON listesindeki araçları analiz et. Listede kaç araç olduğuna göre aşağıdaki mantığı uygula:\n\nDURUM 1: EĞER LİSTEDE HİÇ ARAÇ YOKSA:\n- Kullanıcıdan özür dile ve kriterlerine (fiyat/özellik) uygun araç veritabanında bulamadığını söyle.\n\nDURUM 2: EĞER LİSTEDE TEK (1) ARAÇ VARSA:\n- O aracı detaylıca tanıt.\n- Neden bu aracı önerdiğini ve kronik sorunlarını anlat.\n- (Kıyaslama yapmana gerek yok).\n\nDURUM 3: EĞER LİSTEDE BİRDEN FAZLA ARAÇ VARSA:\n1. Araçları Tanıt: Her aracı madde madde özetle (Fiyat, Model, Öne Çıkan Özellik).\n2. Karşılaştırma Yap: Araçlar arasındaki farkları vurgula (Örn: \"Clio daha az yakar ama Egea'nın parçası daha ucuzdur\").\n3. Senaryolu Öneri: Kullanıcının olası önceliklerine göre yönlendirme yap.\n   - \"Konfor istiyorsanız X...\"\n   - \"Ekonomi istiyorsanız Y...\"\n   - \"Sorunsuzluk istiyorsanız Z...\"\n\nÖNEMLİ KURALLAR:\n- Cevabın sohbet havasında olsun.\n- Asla JSON teknik terimleri kullanma.\n- Fiyatları \"750.000 TL\" formatında okunabilir yaz.\n- Marka ve modelleri net belirt."
+            }
+          ]
+        },
+        "options": {
+          "systemMessage": "Sen Türkçe konuşan bir otomobil uzmanısın."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        800,
+        32
+      ],
+      "id": "d092fc4e-d3c9-4119-8448-b1aaf68fea2a",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Sbt8wsXJIF9AZyH7",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        32
+      ],
+      "id": "44fff1c5-42cf-45bb-a779-aa093f6a3bcb",
+      "name": "Aggregate"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "fiyat_ceken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "__CUSTOM_API_CALL__ row": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fiyat_ceken": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        []
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "999059f0-2cac-4585-bd6e-65eeb8837ec1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "baaa9f19fbd3fd640b1b94d0f7382a8b0e54fecbbd695eec7fd90c832ae9299a"
+  },
+  "id": "2BtGgTZrLu4qepeE",
+  "tags": []
+}
